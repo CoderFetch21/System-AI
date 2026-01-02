@@ -31,8 +31,6 @@ func WriteFileRoot(path string, data []byte) error {
 func BackupFile(path string) (string, error) {
     backupPath := fmt.Sprintf("%s.bak.%s", path, time.Now().Format("20060102-150405"))
     data, err := os.ReadFile(path)
-    if err != nil {
-        return "", err
-    }
+    if err != nil { return "", err }
     return backupPath, os.WriteFile(backupPath, data, 0o644)
 }
