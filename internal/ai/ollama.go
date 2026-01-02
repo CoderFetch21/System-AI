@@ -2,24 +2,158 @@ package ai
 
 import (
     "bytes"
+    "context"
     "encoding/json"
     "fmt"
+    "io"
     "net/http"
-    "github.com/yourusername/systemai/internal/config"
+    "strings"
+    "time"
+
+    "github.com/CoderFetch21/System-AI/internal/config"
 )
 
+type Context struct {
+    DistroFamily   string   `json:"distro_family"`
+    PackageManager string   `json:"package_manager"`
+    Cwd            string   `json:"cwd"`
+    UserQuery      string   `json:"user_query"`
+    RecentActions  []string `json:"recent_actions,omitempty"`
+}
+
 type OllamaPlanner struct {
-    model string
-    endpoint string
+    model     string
+    endpoint  string
+    httpClient *http.Client
 }
 
 func NewOllamaPlanner(cfg *config.Config) *OllamaPlanner {
     return &OllamaPlanner{
-        model: cfg.AiModel,
-        endpoint: "http://127.0.0.1:11434/api/generate",
+        model:     cfg.AiModel,
+        endpoint:  "http://127.0.0.1:11434/api/generate",
+        httpClient: &http.Client{Timeout: 60 * time.Second},
     }
 }
 
-func (p *OllamaPlanner) Plan(input string, ctx Context) (*Plan, error) {
-    prompt := buildSystemPrompt(ctx)
-    prompt += fmt.Sprintf("\n\nUser: %s\n\n
+func (p *OllamaPlanner) Plan(ctx Context) (*Plan, error) {
+    prompt := p.buildPrompt(ctx)
+    
+    reqBody := map[string]interface{}{
+        "model":  p.model,
+        "prompt": prompt,
+        "stream": false,
+        "format": "json",
+        "options": map[string]interface{}{
+            "temperature": 0.1,
+            "top_p":       0.9,
+        },
+    }
+    
+    bodyBytes, _ := json.Marshal(reqBody)
+    resp, err := p.httpClient.Post(p.endpoint, "application/json", bytes.NewReader(bodyBytes))
+    if err != nil {
+        return nil, fmt.Errorf("ollama request failed: %w", err)
+    }
+    defer resp.Body.Close()
+    
+    if resp.StatusCode != http.StatusOK {
+        body, _ := io.ReadAll(resp.Body)
+        return nil, fmt.Errorf("ollama HTTP %d: %s", resp.StatusCode, string(body))
+    }
+    
+    var ollamaResp struct {
+        Response string `json:"response"`
+    }
+    if err := json.NewDecoder(resp.Body).Decode(&ollamaResp); err != nil {
+        return nil, fmt.Errorf("failed to parse ollama response: %w", err)
+    }
+    
+    var plan Plan
+    if err := json.Unmarshal([]byte(ollamaResp.Response), &plan); err != nil {
+        return nil, fmt.Errorf("invalid JSON plan from ollama: %w", err)
+    }
+    
+    if len(plan.Actions) == 0 {
+        plan.Explanation = "No actions identified from user request."
+    }
+    
+    return &plan, nil
+}
+
+func (p *OllamaPlanner) buildPrompt(ctx Context) string {
+    systemPrompt := `You are SystemAI, a Linux system assistant. Analyze the user request and output ONLY valid JSON.
+
+CRITICAL RULES:
+1. Output ONLY JSON matching this exact schema:
+{
+  "actions": [
+    {
+      "type": "install_package|remove_package|read_file|edit_file|create_file|run_command",
+      "package": "name" (for packages),
+      "path": "/full/path" (for files),
+      "language": "bash|nginx|json|yaml" (optional),
+      "content": "full content" (for create_file),
+      "diff": "unified diff" (for edit_file),
+      "command": ["cmd", "args"] (for run_command),
+      "needs_root": true/false
+    }
+  ],
+  "explanation": "brief explanation"
+}
+
+2. Use ONLY these action types above. No others.
+3. For package installs, use EXACT package manager: ` + ctx.PackageManager + `
+4. Paths must be absolute and safe (no /, no block devices)
+5. ALWAYS set needs_root: true for system files (/etc, /usr, /var)
+6. For edits, prefer unified diffs over full rewrites
+7. NEVER execute commands yourself - only propose them
+8. Be conservative - suggest minimal, reversible changes
+
+Context:
+- Distro: ` + ctx.DistroFamily + `
+- Package manager: ` + ctx.PackageManager + `
+- Current directory: ` + ctx.Cwd + `
+
+Recent actions: ` + strings.Join(ctx.RecentActions, ", ") + `
+
+User request: ` + ctx.UserQuery + `
+
+Respond with ONLY the JSON above. No other text.`
+    
+    return systemPrompt
+}
+
+// Validate ensures the plan is safe to execute
+func (p *OllamaPlanner) Validate(plan *Plan) error {
+    dangerousPaths := []string{"/", "/boot", "/proc", "/sys", "/dev"}
+    
+    for i, action := range plan.Actions {
+        switch action.Type {
+        case InstallPackage, RemovePackage:
+            if action.Package == "" {
+                return fmt.Errorf("action %d: empty package name", i)
+            }
+        case ReadFile, EditFile, CreateFile:
+            if action.Path == "" {
+                return fmt.Errorf("action %d: empty path", i)
+            }
+            for _, dangerous := range dangerousPaths {
+                if strings.HasPrefix(action.Path, dangerous) {
+                    return fmt.Errorf("action %d: dangerous path %s", i, action.Path)
+                }
+            }
+        case RunCommand:
+            if len(action.Command) == 0 {
+                return fmt.Errorf("action %d: empty command", i)
+            }
+            // Check for dangerous patterns
+            cmdStr := strings.Join(action.Command, " ")
+            if strings.Contains(cmdStr, "rm -rf") || strings.Contains(cmdStr, "mkfs") {
+                return fmt.Errorf("action %d: dangerous command detected", i)
+            }
+        default:
+            return fmt.Errorf("action %d: unknown type %s", i, action.Type)
+        }
+    }
+    return nil
+}
