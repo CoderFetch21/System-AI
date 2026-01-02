@@ -12,17 +12,17 @@ const (
 )
 
 type Action struct {
-    Type ActionType `json:"type"`
-    Package string `json:"package,omitempty"`
-    Path string `json:"path,omitempty"`
-    Language string `json:"language,omitempty"`
-    Content string `json:"content,omitempty"`
-    Diff string `json:"diff,omitempty"`
-    Command []string `json:"command,omitempty"`
-    NeedsRoot bool `json:"needs_root,omitempty"`
+    Type      ActionType `json:"type"`
+    Package   string     `json:"package,omitempty"`
+    Path      string     `json:"path,omitempty"`
+    Language  string     `json:"language,omitempty"`
+    Content   string     `json:"content,omitempty"`
+    Diff      string     `json:"diff,omitempty"`
+    Command   []string   `json:"command,omitempty"`
+    NeedsRoot bool       `json:"needs_root,omitempty"`
 }
 
 type Plan struct {
-    Actions []Action `json:"actions"`
-    Explanation string `json:"explanation"`
+    Actions     []Action `json:"actions"`
+    Explanation string  `json:"explanation"`
 }
