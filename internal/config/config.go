@@ -22,7 +22,6 @@ func Load(path string) (*Config, error) {
     if err != nil {
         return nil, err
     }
-
     var cfg Config
     if err := json.Unmarshal(data, &cfg); err != nil {
         return nil, err
