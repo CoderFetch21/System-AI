@@ -1,5 +1,9 @@
 package pm
 
+import (
+    "os/exec"
+)
+
 type Manager string
 
 const (
@@ -12,39 +16,23 @@ const (
 )
 
 func Detect() Manager {
-    if hasCommand("apt") {
-        return Apt
-    }
-    if hasCommand("pacman") {
-        return Pacman
-    }
-    if hasCommand("dnf") {
-        return Dnf
-    }
-    if hasCommand("zypper") {
-        return Zypper
-    }
-    if hasCommand("emerge") {
-        return Emerge
-    }
+    if hasCommand("apt") { return Apt }
+    if hasCommand("pacman") { return Pacman }
+    if hasCommand("dnf") { return Dnf }
+    if hasCommand("zypper") { return Zypper }
+    if hasCommand("emerge") { return Emerge }
     return Manual
 }
 
 func InstallCommand(m Manager, pkg string) []string {
     sudo := []string{"sudo", "-k"}
     switch m {
-    case Apt:
-        return append(sudo, "apt", "install", "-y", pkg)
-    case Pacman:
-        return append(sudo, "pacman", "-S", "--noconfirm", pkg)
-    case Dnf:
-        return append(sudo, "dnf", "install", "-y", pkg)
-    case Zypper:
-        return append(sudo, "zypper", "install", "-y", pkg)
-    case Emerge:
-        return append(sudo, "emerge", "--ask", pkg)
-    default:
-        return nil
+    case Apt:    return append(sudo, "apt", "install", "-y", pkg)
+    case Pacman: return append(sudo, "pacman", "-S", "--noconfirm", pkg)
+    case Dnf:    return append(sudo, "dnf", "install", "-y", pkg)
+    case Zypper: return append(sudo, "zypper", "install", "-y", pkg)
+    case Emerge: return append(sudo, "emerge", "--ask", pkg)
+    default:     return nil
     }
 }
 
