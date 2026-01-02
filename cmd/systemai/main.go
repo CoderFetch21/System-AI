@@ -7,8 +7,8 @@ import (
     "os/user"
     "path/filepath"
 
-    "github.com/yourusername/systemai/internal/config"
-    "github.com/yourusername/systemai/internal/tui"
+    "github.com/CoderFetch21/System-AI/internal/config"
+    "github.com/CoderFetch21/System-AI/internal/tui"
 )
 
 func main() {
