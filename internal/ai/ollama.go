@@ -1,14 +1,15 @@
 package ai
 
 import (
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
     "bytes"
     "context"
     "encoding/json"
-    "fmt"
     "io"
-    "net/http"
-    "strings"
-    "time"
 
     "github.com/CoderFetch21/System-AI/internal/config"
 )
