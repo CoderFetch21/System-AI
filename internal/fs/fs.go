@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"strings"
 	"syscall"
+	"time"
 )
 
 func ReadFileUser(path string) ([]byte, error) {
@@ -32,13 +31,22 @@ func WriteFileRoot(path string, data []byte) error {
 func BackupFile(path string) (string, error) {
 	backupPath := fmt.Sprintf("%s.bak.%s", path, time.Now().Format("20060102-150405"))
 	data, err := os.ReadFile(path)
-	if err != nil { return "", err }
+	if err != nil {
+		return "", err
+	}
 	return backupPath, os.WriteFile(backupPath, data, 0o644)
 }
 
 func IsPermissionError(err error) bool {
-	if err == nil { return false }
-	if os.IsPermission(err) { return true }
-	if errors.Is(err, syscall.EACCES) { return true }
+	if err == nil {
+		return false
+	}
+	// Check for permission denied
+	if os.IsPermission(err) {
+		return true
+	}
+	if err == syscall.EACCES {
+		return true
+	}
 	return false
 }
