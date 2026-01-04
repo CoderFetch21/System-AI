@@ -1,9 +1,6 @@
 package pm
 
-import (
-	"os/exec"
-	"strings"
-)
+import "os/exec"
 
 type Manager string
 
