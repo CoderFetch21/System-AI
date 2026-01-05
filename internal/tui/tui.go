@@ -4,15 +4,12 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
-	"time"
 
 	"github.com/CoderFetch21/System-AI/internal/ai"
 	"github.com/CoderFetch21/System-AI/internal/config"
 	"github.com/CoderFetch21/System-AI/internal/fs"
 	"github.com/CoderFetch21/System-AI/internal/pm"
-	"github.com/CoderFetch21/System-AI/internal/runner"
 )
 
 func RunFirstRunWizard() (*config.Config, error) {
@@ -45,13 +42,15 @@ func RunMainTUI(cfg *config.Config, configPath string) error {
 		input := readLine(reader)
 		
 		switch input {
-		case "exit", "quit": return nil
+		case "exit", "quit":
+			return nil
 		case "help":
 			fmt.Println("Natural language → AI → Execute")
+			fmt.Println("Examples: 'update my system', 'install htop', 'show /etc/fstab'")
 		case "show config":
 			fmt.Printf("%+v\n", cfg)
 		default:
-			// AI FIRST, THEN EXECUTE
+			// AI INTERPRETATION FIRST
 			planner := ai.NewOllamaPlanner(cfg)
 			aiCtx := ai.Context{
 				DistroFamily:   cfg.DistroFamily,
@@ -68,63 +67,64 @@ func RunMainTUI(cfg *config.Config, configPath string) error {
 			}
 			
 			if err := planner.Validate(plan); err != nil {
-				fmt.Printf("\n❌ Unsafe plan: %v\n", err)
+				fmt.Printf("\n❌ Unsafe plan rejected: %v\n", err)
 				continue
 			}
 			
 			// SHOW AI PLAN
 			fmt.Printf("\n🤖 AI Plan (%d actions):\n", len(plan.Actions))
-			fmt.Println(plan.Explanation)
+			if plan.Explanation != "" {
+				fmt.Println(plan.Explanation)
+			}
 			for i, action := range plan.Actions {
 				fmt.Printf("  %d. %s", i+1, action.Type)
-				if action.Package != "" { fmt.Printf(" [%s]", action.Package) }
-				if action.Path != "" { fmt.Printf(" %s", action.Path) }
-				if action.NeedsRoot { fmt.Print(" 🔒") }
+				if action.Package != "" {
+					fmt.Printf(" [%s]", action.Package)
+				}
+				if action.Path != "" {
+					fmt.Printf(" %s", action.Path)
+				}
+				if action.NeedsRoot {
+					fmt.Print(" 🔒")
+				}
 				fmt.Println()
 			}
 			
-			// EXECUTE
+			// CONFIRM EXECUTION
 			fmt.Print("\nExecute AI plan? (y/N): ")
 			if !confirm(reader) {
-				fmt.Println("Cancelled.")
+				fmt.Println("Plan cancelled.")
 				continue
 			}
 			
-			fmt.Println("🚀 Executing...")
+			fmt.Println("🚀 Executing AI plan...")
 			for i, action := range plan.Actions {
 				fmt.Printf("\n--- Action %d/%d ---\n", i+1, len(plan.Actions))
 				
 				switch action.Type {
 				case ai.InstallPackage:
 					cmd := pm.InstallCommand(pm.Manager(cfg.PackageManager), action.Package)
-					if cmd != nil && runner.RunCommand(cmd) == nil {
-						fmt.Println("✅ Installed")
+					if cmd != nil {
+						fmt.Printf("🔄 sudo -k %s %s\n", cfg.PackageManager, action.Package)
+						fmt.Println("  (AI would execute this - runner.RunCommand() pending)")
+					} else {
+						fmt.Printf("❌ No command for %s\n", cfg.PackageManager)
 					}
 					
 				case ai.RunCommand:
-					if runner.RunCommand(action.Command) == nil {
-						fmt.Println("✅ Command OK")
+					if len(action.Command) > 0 {
+						fmt.Printf("🔄 %s\n", strings.Join(action.Command, " "))
+						fmt.Println("  (AI would execute this - runner.RunCommand() pending)")
 					}
 					
 				case ai.ReadFile:
-					data, err := fs.ReadFileUser(action.Path)
-					if fs.IsPermissionError(err) && cfg.AllowRootExecute {
-						fmt.Print("Root access needed. Retry? (y/N): ")
-						if confirm(reader) {
-							data, err = fs.ReadFileRoot(action.Path)
-						}
-					}
-					if err != nil {
-						fmt.Printf("❌ Read error: %v\n", err)
-					} else {
-						fmt.Printf("📄 %s:\n%s\n", action.Path, truncate(string(data), 500))
-					}
+					fmt.Printf("📄 Would read: %s\n", action.Path)
 					
 				default:
-					fmt.Printf("⚠️ %s pending\n", action.Type)
+					fmt.Printf("⚠️ %s action pending implementation\n", action.Type)
 				}
 			}
-			fmt.Println("\n✅ AI plan complete!")
+			fmt.Println("\n✅ AI plan processed!")
 		}
 	}
 }
@@ -136,9 +136,4 @@ func readLine(r *bufio.Reader) string {
 
 func confirm(r *bufio.Reader) bool {
 	return strings.ToLower(readLine(r)) == "y"
-}
-
-func truncate(s string, max int) string {
-	if len(s) <= max { return s }
-	return s[:max] + "..."
 }
