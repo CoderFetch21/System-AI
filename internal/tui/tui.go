@@ -8,7 +8,6 @@ import (
 
 	"github.com/CoderFetch21/System-AI/internal/ai"
 	"github.com/CoderFetch21/System-AI/internal/config"
-	"github.com/CoderFetch21/System-AI/internal/pm"
 )
 
 func RunFirstRunWizard() (*config.Config, error) {
