@@ -8,7 +8,6 @@ import (
 
 	"github.com/CoderFetch21/System-AI/internal/ai"
 	"github.com/CoderFetch21/System-AI/internal/config"
-	"github.com/CoderFetch21/System-AI/internal/fs"
 	"github.com/CoderFetch21/System-AI/internal/pm"
 )
 
@@ -35,7 +34,7 @@ func RunFirstRunWizard() (*config.Config, error) {
 func RunMainTUI(cfg *config.Config, configPath string) error {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("🧠 SystemAI + Llama 3.2 3B Ready!")
-	fmt.Println("Try: 'update my system', 'install htop', 'show /etc/fstab'")
+	fmt.Println("Try: 'update my system', 'install htop'")
 	
 	for {
 		fmt.Print("systemai> ")
@@ -45,12 +44,12 @@ func RunMainTUI(cfg *config.Config, configPath string) error {
 		case "exit", "quit":
 			return nil
 		case "help":
-			fmt.Println("Natural language → AI → Execute")
-			fmt.Println("Examples: 'update my system', 'install htop', 'show /etc/fstab'")
+			fmt.Println("Natural language → AI → Action plan")
+			fmt.Println("Examples: 'update my system', 'install htop'")
 		case "show config":
 			fmt.Printf("%+v\n", cfg)
 		default:
-			// AI INTERPRETATION FIRST
+			// AI PROCESSING
 			planner := ai.NewOllamaPlanner(cfg)
 			aiCtx := ai.Context{
 				DistroFamily:   cfg.DistroFamily,
@@ -67,11 +66,11 @@ func RunMainTUI(cfg *config.Config, configPath string) error {
 			}
 			
 			if err := planner.Validate(plan); err != nil {
-				fmt.Printf("\n❌ Unsafe plan rejected: %v\n", err)
+				fmt.Printf("\n❌ Unsafe plan: %v\n", err)
 				continue
 			}
 			
-			// SHOW AI PLAN
+			// DISPLAY AI PLAN
 			fmt.Printf("\n🤖 AI Plan (%d actions):\n", len(plan.Actions))
 			if plan.Explanation != "" {
 				fmt.Println(plan.Explanation)
@@ -90,41 +89,30 @@ func RunMainTUI(cfg *config.Config, configPath string) error {
 				fmt.Println()
 			}
 			
-			// CONFIRM EXECUTION
 			fmt.Print("\nExecute AI plan? (y/N): ")
 			if !confirm(reader) {
 				fmt.Println("Plan cancelled.")
 				continue
 			}
 			
-			fmt.Println("🚀 Executing AI plan...")
+			fmt.Println("🚀 AI plan approved (execution preview):")
 			for i, action := range plan.Actions {
 				fmt.Printf("\n--- Action %d/%d ---\n", i+1, len(plan.Actions))
 				
 				switch action.Type {
 				case ai.InstallPackage:
-					cmd := pm.InstallCommand(pm.Manager(cfg.PackageManager), action.Package)
-					if cmd != nil {
-						fmt.Printf("🔄 sudo -k %s %s\n", cfg.PackageManager, action.Package)
-						fmt.Println("  (AI would execute this - runner.RunCommand() pending)")
-					} else {
-						fmt.Printf("❌ No command for %s\n", cfg.PackageManager)
-					}
-					
+					fmt.Printf("🔄 Would run: sudo -k %s %s\n", cfg.PackageManager, action.Package)
 				case ai.RunCommand:
 					if len(action.Command) > 0 {
-						fmt.Printf("🔄 %s\n", strings.Join(action.Command, " "))
-						fmt.Println("  (AI would execute this - runner.RunCommand() pending)")
+						fmt.Printf("🔄 Would run: %s\n", strings.Join(action.Command, " "))
 					}
-					
 				case ai.ReadFile:
 					fmt.Printf("📄 Would read: %s\n", action.Path)
-					
 				default:
-					fmt.Printf("⚠️ %s action pending implementation\n", action.Type)
+					fmt.Printf("⚠️ %s pending full implementation\n", action.Type)
 				}
 			}
-			fmt.Println("\n✅ AI plan processed!")
+			fmt.Println("\n✅ AI processing complete!")
 		}
 	}
 }
